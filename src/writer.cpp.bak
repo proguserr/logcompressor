@@ -1,0 +1,57 @@
+
+#include "lc/format.hpp"
+#include "lc/block.hpp"
+#include "lc/file_io.hpp"
+#include <vector>
+#include <fstream>
+#include <cstring>
+
+namespace lc {
+
+static void write_u32(std::ofstream& ofs, uint32_t v){
+  ofs.write(reinterpret_cast<const char*>(&v), sizeof(v));
+}
+static void write_u64(std::ofstream& ofs, uint64_t v){
+  ofs.write(reinterpret_cast<const char*>(&v), sizeof(v));
+}
+static void write_hdr(std::ofstream& ofs, const Header& h){
+  ofs.write(reinterpret_cast<const char*>(&h), sizeof(h));
+}
+
+bool write_lcmp_file(const std::string& path, const Header& hdr, const std::vector<EncodedBlock>& blocks) {
+  std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
+  if (!ofs) return false;
+
+  write_hdr(ofs, hdr);
+  std::vector<uint64_t> index;
+  index.reserve(blocks.size());
+
+  for (auto& b : blocks) {
+    auto pos = ofs.tellp();
+    index.push_back(static_cast<uint64_t>(pos));
+
+    write_u32(ofs, b.meta.raw_len);
+    write_u32(ofs, b.meta.comp_len);
+    write_u32(ofs, b.meta.dict_id);
+    write_u32(ofs, b.meta.checksum);
+    ofs.write(reinterpret_cast<const char*>(b.payload.data()), b.payload.size());
+  }
+
+  uint64_t block_count = blocks.size();
+  uint64_t index_offset = static_cast<uint64_t>(ofs.tellp());
+  // Footer
+  write_u64(ofs, block_count);
+  write_u64(ofs, index_offset);
+
+  // Index
+  for (size_t i = 0; i < index.size(); ++i) {
+    write_u64(ofs, index[i]);
+    write_u32(ofs, blocks[i].meta.raw_len);
+    write_u32(ofs, blocks[i].meta.comp_len);
+  }
+  uint32_t footer_chk = 0; // simple placeholder
+  write_u32(ofs, footer_chk);
+  return ofs.good();
+}
+
+} // namespace lc

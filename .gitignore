@@ -1,0 +1,10 @@
+build/
+/CMakeCache.txt
+/CMakeFiles/
+/cmake-build-*/
+*.o
+*.a
+*.dSYM/
+
+.vscode/
+.idea/

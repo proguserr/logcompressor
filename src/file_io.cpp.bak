@@ -1,0 +1,26 @@
+
+#include "lc/file_io.hpp"
+#include <fstream>
+#include <vector>
+
+namespace lc {
+
+bool read_all(const std::string& path, std::vector<uint8_t>& out) {
+  std::ifstream ifs(path, std::ios::binary);
+  if (!ifs) return false;
+  ifs.seekg(0, std::ios::end);
+  auto sz = static_cast<size_t>(ifs.tellg());
+  ifs.seekg(0, std::ios::beg);
+  out.resize(sz);
+  ifs.read(reinterpret_cast<char*>(out.data()), sz);
+  return ifs.good();
+}
+
+bool write_all(const std::string& path, const std::vector<uint8_t>& data) {
+  std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
+  if (!ofs) return false;
+  ofs.write(reinterpret_cast<const char*>(data.data()), data.size());
+  return ofs.good();
+}
+
+} // namespace lc

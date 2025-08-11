@@ -1,0 +1,51 @@
+
+cmake_minimum_required(VERSION 3.20)
+project(logcompressor CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+include(FetchContent)
+
+# xxHash
+FetchContent_Declare(
+  xxhash
+  GIT_REPOSITORY https://github.com/Cyan4973/xxHash.git
+  GIT_TAG v0.8.2
+)
+FetchContent_MakeAvailable(xxhash)
+
+# LZ4
+FetchContent_Declare(
+  lz4
+  GIT_REPOSITORY https://github.com/lz4/lz4.git
+  GIT_TAG v1.9.4
+)
+FetchContent_MakeAvailable(lz4)
+
+add_library(lc
+  src/varint.cpp
+  src/checksum_xxhash.cpp
+  src/codec_lz4.cpp
+  src/block_codec.cpp
+  src/writer.cpp
+  src/reader.cpp
+  src/pipeline.cpp
+  src/file_io.cpp
+)
+target_include_directories(lc PUBLIC include)
+# lz4 project provides liblz4 target when built via cmake build tree
+# otherwise we link to lz4::lz4 (newer cmake) - try both.
+find_library(LZ4_LIB NAMES lz4 liblz4 PATHS ${lz4_SOURCE_DIR}/lib ${lz4_BINARY_DIR}/lib NO_DEFAULT_PATH)
+if(NOT LZ4_LIB)
+  message(STATUS "Falling back to target lz4")
+endif()
+
+target_link_libraries(lc PRIVATE xxhash ${LZ4_LIB})
+
+add_executable(logc src/cli_main.cpp)
+target_link_libraries(logc PRIVATE lc)
+

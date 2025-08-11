@@ -1,0 +1,61 @@
+#include "lc/file_io.hpp"
+
+#include "lc/format.hpp"
+#include "lc/block.hpp"
+#include <fstream>
+#include <vector>
+
+namespace lc {
+
+static uint32_t read_u32(std::ifstream& ifs){
+  uint32_t v; ifs.read(reinterpret_cast<char*>(&v), sizeof(v)); return v;
+}
+static uint64_t read_u64(std::ifstream& ifs){
+  uint64_t v; ifs.read(reinterpret_cast<char*>(&v), sizeof(v)); return v;
+}
+
+bool read_lcmp_blocks(const std::string& path, Header& hdr, std::vector<EncodedBlock>& blocks){
+  std::ifstream ifs(path, std::ios::binary);
+  if (!ifs) return false;
+  ifs.read(reinterpret_cast<char*>(&hdr), sizeof(hdr));
+  if (hdr.magic != MAGIC || hdr.version != VERSION) return false;
+
+  // read to end to locate footer (block_count + index_offset at end BEFORE index)
+  ifs.seekg(0, std::ios::end);
+  auto end = ifs.tellg();
+
+  // The footer is 16 bytes + 4 checksum at the end of file + variable index before it.
+  // We need to search backwards: last 4 bytes is footer checksum, before it is index entries
+  // but we don't know block_count without footer. So read last 16+4 and then seek to index.
+  ifs.seekg(end - static_cast<std::streamoff>(sizeof(uint32_t)), std::ios::beg);
+  uint32_t footer_chk; ifs.read(reinterpret_cast<char*>(&footer_chk), sizeof(footer_chk));
+
+  ifs.seekg(-static_cast<std::streamoff>(sizeof(uint32_t) + 16), std::ios::end);
+  uint64_t block_count = read_u64(ifs);
+  uint64_t index_offset = read_u64(ifs);
+
+  // Now read index
+  ifs.seekg(index_offset, std::ios::beg);
+  std::vector<BlockMeta> metas(block_count);
+  std::vector<uint64_t> offsets(block_count);
+  for (size_t i = 0; i < block_count; ++i) {
+    offsets[i] = read_u64(ifs);
+    metas[i].raw_len = read_u32(ifs);
+    metas[i].comp_len = read_u32(ifs);
+  }
+
+  // Read blocks
+  blocks.resize(block_count);
+  for (size_t i = 0; i < block_count; ++i) {
+    ifs.seekg(offsets[i], std::ios::beg);
+    blocks[i].meta.raw_len = read_u32(ifs);
+    blocks[i].meta.comp_len = read_u32(ifs);
+    blocks[i].meta.dict_id = read_u32(ifs);
+    blocks[i].meta.checksum = read_u32(ifs);
+    blocks[i].payload.resize(blocks[i].meta.comp_len);
+    ifs.read(reinterpret_cast<char*>(blocks[i].payload.data()), blocks[i].payload.size());
+  }
+  return true;
+}
+
+} // namespace lc
